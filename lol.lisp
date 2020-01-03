@@ -16,3 +16,9 @@
 			      `,as
 			      `(cdr ,as)))))))))
 
+
+
+;;; flatten
+;;; flatten is not work in sbcl
+;;; for ,x is not '(, x) is a
+;;; struct not a list?
