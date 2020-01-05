@@ -96,20 +96,28 @@
 (defun get-unit-chain (u units)
   (car (member u units :test #'eq :key #'car)))
 
-(defun chain-unit (u base-unit units)
+(defun depend-unit-pair (upair base-unit)
+  (if (consp (second upair))
+      upair
+      `(,(car upair) (,(second upair) ,base-unit))))
+
+(defun get-u-depend (u base-unit units)
+  (second
+   (depend-unit-pair (get-unit-chain u units)
+		     base-unit)))
+
+(defun chain-unit (u base-unit units history)
+  (if (member u history)
+      (error "~a depends on ~a depends on ~a~%" u (cadadr (get-unit-chain u units)) u))
   (if (eq base-unit u)
       1
-      (* (caadr (get-unit-chain u units))
-	 (chain-unit (cadadr (get-unit-chain u units)) base-unit units))))
-
-(defun expand-unit (unit base-unit &rest units)
-  (let ((lu (group units 2)))
-    (chain-unit unit base-unit lu)))
-
+      (let ((upair (get-u-depend u base-unit units)))
+	(* (first upair)
+	   (chain-unit (second upair) base-unit units (push u history))))))
 
 (defun expand-units (base-unit units)
   (loop :for u :in units :collect
-	`((,(car u)) ,(chain-unit (car u) base-unit units))))
+	`((,(car u)) ,(chain-unit (car u) base-unit units '()))))
        
   
   
