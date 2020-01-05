@@ -29,7 +29,7 @@
 			    (rec (cdr tree) result)))
 		   #+sbcl
 		   ((sb-impl::comma-p tree)
-		    (list (sb-impl::comma-expr tree)))
+		    (rec (sb-impl::comma-expr tree) result))
 		   (t  (list tree)))))
     (remove '() (rec tree '()))))
 
@@ -118,6 +118,191 @@
 (defun expand-units (base-unit units)
   (loop :for u :in units :collect
 	`((,(car u)) ,(chain-unit (car u) base-unit units '()))))
-       
-  
+
+
+#|
+nlet: usage
+(defun nlet-fact (n)
+  (nlet fact ((n n))
+    (if (zerop n)
+      1
+      (* n (fact (- n 1))))))
+
+---->
+(defun nlet-fact (n)
+  (let ((n n))
+    (labels ((fact (n)
+	       (if (zerop n)
+		   1
+		   (* n (fact (- n 1))))))
+      (fact n))))
+|#
+(defmacro nlet (name letargs &rest body)
+  `(labels ((,name ,(mapcar #'first letargs)
+	      ,@body))
+     (,name ,@(mapcar #'second letargs))))
+
+
+#|
+for defun defmacro/g!
+useage:
+(defmacro/g! nif (expr pos zero neg)
+  `(let ((,g!result ,expr))
+     (cond ((plusp ,g!result) ,pos)
+           ((zerop ,g!result) ,zero)
+            (t ,neg))))
+|#
+(defun g!-symbol-p (s)
+  (and (symbolp s)
+       (> (length (symbol-name s)) 2)
+       (string= (symbol-name s) "G!" :start1 0 :end1 2)))
+
+#|
+what defmacro/g! does is automate using gensym 
+to create symbol :
+(defmacro/g! nif (expr pos zero neg)
+  `(let ((,g!result ,expr))
+     (cond ((plusp ,g!result) ,pos)
+           ((zerop ,g!result) ,zero)
+            (t ,neg))))
+
+--->
+(defmacro nif (expr pos zero neg)
+  (let ((g!result (gensym "result")))
+    `(let ((,g!result ,expr))
+       (cond ((plusp ,g!result) ,pos)
+	     ((zerop ,g!result) ,zero)
+	     (t ,neg)))))
+
+so to create this macro template as follows:
+1. search the g!xx symbol
+2. create gensym using these symbol
+3. add the defmacro 
+|#
+
+(defmacro defmacro/g! (name args &rest body)
+  ;; 1. search the g!xx symbols
+  (let ((gsyms (remove-duplicates
+		(remove-if-not #'g!-symbol-p (flatten body)))))
+    `(defmacro ,name ,args
+       (let ,(loop :for g :in gsyms :collect `(,g (gensym ,(subseq (symbol-name g) 2))))
+	 ,@body))))
+
+
+#|
+what defmacro! does is add a 'let over lambda' 
+over defmacro/g! 
+usage:
+(defmacro! nif (o!expr pos zero neg)
+  `(cond ((plusp ,g!expr) ,pos)
+         ((zerop ,g!expr) ,zero)
+          (t ,neg)))
+|#
+(defun o!-symbol-p (s)
+  (and (symbolp s)
+       (> (length (symbol-name s)) 2)
+       (string= (symbol-name s) "O!" :start1 0 :end1 2)))
+
+(defun o!-symbol-to-g!-symbol (s)
+  (symb "G!" (subseq (symbol-name s) 2)))
+
+(defmacro defmacro! (name args &rest body)
+  (let* ((os (remove-if-not #'o!-symbol-p args))
+	 (gs (mapcar #'o!-symbol-to-g!-symbol os)))
+    `(defmacro/g! ,name ,args
+       `(let ,(loop :for g :in (list ,@gs)
+		    :for o :in (list ,@os)
+		    :collect (append (list g) (list o)))
+	  ,,@body))))
+
+
+#|
+
+(defun build-legargs (gs os)
+  (loop :for g :in gs :for o :in os :collect
+				    (list g o)))
+
+(defun build-f (gs os)
+  (mapcar #'list gs os))
+
+*** This macro does not work
+*** As when defmacro/g! expand
+*** which is before the g!xx symbol
+*** That will cause o!x not 
+*** used error
+(defmacro defmacro! (name args &rest body)
+  (let* ((os (remove-if-not #'o!-symbol-p args))
+	 (gs (mapcar #'o!-symbol-to-g!-symbol os)))
+    `(defmacro/g! ,name ,args
+       `(let ,(build-legargs ,gs ,os)
+	  ,,@body))))
+
+
+***
+***  This is the let over lambda definition
+***  As I currently understand that, using
+***  list function here is to expand the gs 
+***  os things at the defmacro! expand and 
+***  the list function will called the args
+***  eval after the defmacro/g! expand, at 
+***  that point the g!x is gensymed (eval
+***  time).  
+***
+(defmacro defmacro! (name args &rest body)
+  (let* ((os (remove-if-not #'o!-symbol-p args))
+         (gs (mapcar #'o!-symbol-to-g!-symbol os)))
+    `(defmacro/g! ,name ,args
+       `(let ,(mapcar #'list (list ,@gs) (list ,@os))
+          ,(progn ,@body)))))
+
+***  This is the same as the first defmacro!
+***  when build-legargs eval in the defmacro/o!
+***  expand. Which expands to ((g!x o!x)), this
+***  will not be expanded in the defmacro/g! 
+***  expand
+***
+(defmacro defmacro/o! (name args &rest body)
+  (let* ((os (remove-if-not #'o!-symbol-p args))
+         (gs (mapcar #'o!-symbol-to-g!-symbol os)))
+    `(defmacro/g! ,name ,args
+       `(let ,(build-legargs ',gs ',os)
+          ,(progn ,@body)))))
+
+***  This is the same as the above
+(defmacro defmacro/o!! (name args &rest body)
+  (let* ((os (remove-if-not #'o!-symbol-p args))
+         (gs (mapcar #'o!-symbol-to-g!-symbol os)))
+    `(defmacro/g! ,name ,args
+       `(let ,(funcall #'build-f ',gs ',os)
+          ,(progn ,@body)))))
+
+|#
+
+
+#|
+for this example
+(defmacro! sq (o!x) 
+  `(* ,g!x ,g!x))
+
+---->
+(defmacro sq (o!x)
+  (let ((g!x (gemsym "x")))
+    `(let ((,g!x ,o!x))
+       (* ,g!x ,g!x))))
+
+As `(let ((,g!x ,o!x))
+      (* ,g!x ,g!x))
+
+---->
+(list 'let `((,g!x ,o!x))
+      `(* ,g!x ,g!x))
+---->
+(list 'let (list `(,g!x ,o!x))
+      (list '* g!x g!x))
+---->
+(list 'let (list (list g!x o!x))
+      (list '* g!x g!x))
+
+|#
+
   
