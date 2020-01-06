@@ -306,3 +306,40 @@ As `(let ((,g!x ,o!x))
 |#
 
   
+
+#|
+chapter 4 Read Macro
+for #> to read strings.
+|#
+(defun |#>-reader| (stream sub-char numarg)
+  (declare (ignore sub-char numarg))
+  ;; 1. first to read the delimita words
+  (let ((chars))
+    (do ((ch (read-char stream) (read-char stream)))
+	((char= #\newline ch))
+      (push ch chars))
+
+    ;; 2. continue to read until match
+    ;; chars stop. and which will be
+    ;; the contents
+    (let ((keys (nreverse chars))
+	  (outputs))
+      (do ((ch (read-char stream) (read-char stream)))
+	  ((null keys) outputs)
+	(push ch outputs)
+	(if (char= ch (car keys))
+	    (setf keys (cdr keys))
+	    (setf keys chars))
+	(if (null keys)
+	    (return)))
+      (coerce
+       (reverse (nthcdr (length chars) outputs))
+       'string))))
+
+(set-dispatch-macro-character #\# #\> #'|#>-reader|)
+
+  
+	    
+	
+	
+      
