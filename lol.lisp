@@ -86,12 +86,12 @@
 	      ,@(expand-units `,base-unit (group `,units 2))))))) 
 
 
-#|
+#||
 (defunits time 
   s
   m (1/60 h)
   h (60 m))
-|#
+||#
 
 (defun get-unit-chain (u units)
   (car (member u units :test #'eq :key #'car)))
@@ -120,7 +120,7 @@
 	`((,(car u)) ,(chain-unit (car u) base-unit units '()))))
 
 
-#|
+#||
 nlet: usage
 (defun nlet-fact (n)
   (nlet fact ((n n))
@@ -136,14 +136,14 @@ nlet: usage
 		   1
 		   (* n (fact (- n 1))))))
       (fact n))))
-|#
+||#
 (defmacro nlet (name letargs &rest body)
   `(labels ((,name ,(mapcar #'first letargs)
 	      ,@body))
      (,name ,@(mapcar #'second letargs))))
 
 
-#|
+#||
 for defun defmacro/g!
 useage:
 (defmacro/g! nif (expr pos zero neg)
@@ -151,13 +151,13 @@ useage:
      (cond ((plusp ,g!result) ,pos)
            ((zerop ,g!result) ,zero)
             (t ,neg))))
-|#
+||#
 (defun g!-symbol-p (s)
   (and (symbolp s)
        (> (length (symbol-name s)) 2)
        (string= (symbol-name s) "G!" :start1 0 :end1 2)))
 
-#|
+#||
 what defmacro/g! does is automate using gensym 
 to create symbol :
 (defmacro/g! nif (expr pos zero neg)
@@ -178,7 +178,7 @@ so to create this macro template as follows:
 1. search the g!xx symbol
 2. create gensym using these symbol
 3. add the defmacro 
-|#
+||#
 
 (defmacro defmacro/g! (name args &rest body)
   ;; 1. search the g!xx symbols
@@ -189,7 +189,7 @@ so to create this macro template as follows:
 	 ,@body))))
 
 
-#|
+#||
 what defmacro! does is add a 'let over lambda' 
 over defmacro/g! 
 usage:
@@ -197,7 +197,7 @@ usage:
   `(cond ((plusp ,g!expr) ,pos)
          ((zerop ,g!expr) ,zero)
           (t ,neg)))
-|#
+||#
 (defun o!-symbol-p (s)
   (and (symbolp s)
        (> (length (symbol-name s)) 2)
@@ -216,7 +216,7 @@ usage:
 	  ,,@body))))
 
 
-#|
+#||
 
 (defun build-legargs (gs os)
   (loop :for g :in gs :for o :in os :collect
@@ -276,10 +276,10 @@ usage:
        `(let ,(funcall #'build-f ',gs ',os)
           ,(progn ,@body)))))
 
-|#
+||#
 
 
-#|
+#||
 for this example
 (defmacro! sq (o!x) 
   `(* ,g!x ,g!x))
@@ -303,14 +303,14 @@ As `(let ((,g!x ,o!x))
 (list 'let (list (list g!x o!x))
       (list '* g!x g!x))
 
-|#
+||#
 
   
 
-#|
+#||
 chapter 4 Read Macro
 for #> to read strings.
-|#
+||#
 (defun |#>-reader| (stream sub-char numarg)
   (declare (ignore sub-char numarg))
   ;; 1. first to read the delimita words
@@ -341,14 +341,14 @@ for #> to read strings.
   
 	    
 
-#|
+#||
 segment-reader
 usage:
 (segment-reader t #\/ 3)
 abc/def/ghi/
 
 ("abc" "def" "ghi")
-|#
+||#
 (defun segment-reader (stream ch numberarg)
   (if (> numberarg 0)
       (let ((chars))
@@ -362,3 +362,77 @@ abc/def/ghi/
 
 	
       
+
+;;#+cl-ppcre
+(defun |#~-reader| (stream sub-char numarg)
+  (declare (ignore sub-char numarg))
+  (let ((mode-char (read-char stream)))
+    (cond
+      ((char= mode-char #\m)
+         (match-mode-ppcre-lambda-form
+           (segment-reader stream
+                           (read-char stream)
+                           1)))
+      ((char= mode-char #\s)
+         (subst-mode-ppcre-lambda-form
+           (segment-reader stream
+                           (read-char stream)
+                           2)))
+      (t (error "Unknown #~~ mode character")))))
+
+;;#+cl-ppcre
+(set-dispatch-macro-character #\# #\~ #'|#~-reader|)
+
+#||
+Original ppcre mode is :
+#+cl-ppcre
+(defmacro! match-mode-ppcre-lambda-form (o!args)
+ ``(lambda (,',g!str)
+     (cl-ppcre:scan
+       ,(car ,g!args)
+       ,',g!str)))
+
+#+cl-ppcre
+(defmacro! subst-mode-ppcre-lambda-form (o!args)
+ ``(lambda (,',g!str)
+     (cl-ppcre:regex-replace-all
+       ,(car ,g!args)
+       ,',g!str
+       ,(cadr ,g!args))))
+
+now rewrite it without the defamcro!
+||#
+
+
+#||
+Add some expanations here:
+defmacro! will expandto 
+(let ((g!args (gensym "args"))
+      (g!str (gensym "str")))
+  `(let ((,g!args ,o!args)) ;; here is why
+     `(lambda (,',g!str)      ;; defmacro! has
+	(cl-ppcre-scan      ;; implemented
+	 ,(car ,g!args)     ;; once-only
+	 ,',g!str))))       ;; it eval once here
+
+||#
+;;; using gensym
+(defmacro match-mode-ppcre-lambda-form (args)
+  (let ((x (gensym))
+	(y (gensym)))
+    `(let ((,y ,args))
+       `(lambda (,',x)
+	  (cl-ppcre:scan
+	   ,(car ,y)
+	   ,',x)))))
+
+
+(defmacro subst-mode-ppcre-lambda-form (args)
+  (let ((x (gensym))
+	(y (gensym)))
+    `(let ((,y ,args))
+       `(lambda (,',x)
+	  (cl-ppcre:regex-replace-all
+	   ,(car ,y)
+	   ,',x
+	   ,(cadr ,y))))))
