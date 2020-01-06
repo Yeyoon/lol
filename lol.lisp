@@ -340,6 +340,25 @@ for #> to read strings.
 
   
 	    
-	
+
+#|
+segment-reader
+usage:
+(segment-reader t #\/ 3)
+abc/def/ghi/
+
+("abc" "def" "ghi")
+|#
+(defun segment-reader (stream ch numberarg)
+  (if (> numberarg 0)
+      (let ((chars))
+	(do ((c (read-char stream) (read-char stream)))
+	    ((char= c ch)
+	     (cons
+	      (coerce (nreverse chars) 'string)
+	      (segment-reader stream ch (- numberarg 1))))
+	  (push c chars)))))
+	  
+
 	
       
