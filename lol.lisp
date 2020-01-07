@@ -436,3 +436,44 @@ defmacro! will expandto
 	   ,(car ,y)
 	   ,',x
 	   ,(cadr ,y))))))
+
+
+
+(defun atest (n)
+  (macrolet ((fact (n acc)
+	       `(progn
+		  (psetq ,@(apply #'nconc
+				  (mapcar #'list '(n acc)
+					  (list n acc))))
+		  (go bxx))))
+    (block cxx
+      (let ((n n) (acc 1))
+	(tagbody
+	 bxx
+	   (return-from cxx
+	     (progn
+	       (if (zerop n)
+		   acc
+		   (fact (- n 1) (* acc n))))))))))
+
+
+(defmacro nlet-tail (n letargs &rest body)
+  (let ((gs (loop :for x :in letargs :collect (gensym))))
+    `(macrolet ((,n ,gs
+		  `(progn
+		     (psetq 
+		      ,@(loop :for x :in ',letargs
+			      :for y :in (list ,@gs)
+			      :append
+			      `(,(car x) ,y)))
+		      (go abcdefg))))
+       (block ab
+	 (let ,letargs
+	   (tagbody
+	    abcdefg
+	      (return-from ab
+		(progn
+		  ,@body))))))))
+
+
+
