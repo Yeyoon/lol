@@ -457,7 +457,7 @@ defmacro! will expandto
 		   (fact (- n 1) (* acc n))))))))))
 
 
-(defmacro nlet-tail (n letargs &rest body)
+(defmacro nlet-tail% (n letargs &rest body)
   (let ((gs (loop :for x :in letargs :collect (gensym))))
     `(macrolet ((,n ,gs
 		  `(progn
@@ -476,4 +476,21 @@ defmacro! will expandto
 		  ,@body))))))))
 
 
-
+;; using defmacro! rewrite it
+(defmacro! nlet-tail (n letargs &rest body)
+  (let ((gs (loop :for x :in letargs :collect (gensym))))
+    `(macrolet ((,n ,gs
+		  `(progn
+		     (psetq
+		      ,@(loop :for x :in ',letargs
+			   :for y :in (list ,@gs)
+			   :append
+			   `(,(car x) ,y)))
+		     (go ,',g!tag))))
+       (block ,g!block
+	 (let ,letargs
+	   (tagbody
+	      ,g!tag
+	      (return-from ,g!block
+		(progn
+		  ,@body))))))))
