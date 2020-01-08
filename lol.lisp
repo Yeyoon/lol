@@ -494,3 +494,68 @@ defmacro! will expandto
 	      (return-from ,g!block
 		(progn
 		  ,@body))))))))
+
+
+#||
+cxr
+(defvar cxr-inline-thresh 10)
+
+(defmacro! cxr (x tree)
+  (if (null x)
+    tree
+    (let ((op (cond
+                ((eq 'a (cadr x)) 'car)
+                ((eq 'd (cadr x)) 'cdr)
+                (t (error "Non A/D symbol")))))
+      (if (and (integerp (car x))
+               (<= 1 (car x) cxr-inline-thresh))
+         (if (= 1 (car x))
+           `(,op (cxr ,(cddr x) ,tree))
+           `(,op (cxr ,(cons (- (car x) 1) (cdr x))
+                      ,tree)))
+         `(nlet-tail
+            ,g!name ((,g!count ,(car x))
+                     (,g!val (cxr ,(cddr x) ,tree))) 
+            (if (>= 0 ,g!count)
+              ,g!val
+              ;; Will be a tail:
+              (,g!name (- ,g!count 1)
+                       (,op ,g!val))))))))
+
+usage:
+* (macroexpand
+    '(cxr% (1 a 2 d) some-list))
+
+(CAR (CXR% (2 D) SOME-LIST))
+T
+
+(defun eleventh (x)
+  (cxr% (1 a 10 d) x))
+||#
+
+(defmacro cxr% (x tree)
+  (if x
+      (let ((n (car x))
+	    (op (cadr x))
+	    (rest (cddr x)))
+	`(,(cond ((eq op 'a) 'car)
+		 ((eq op 'd) 'cdr)
+		 (t (error "Not support op ~a~%" op)))
+	  (cxr% ,(if (> n 1)
+		     `(,(- n 1) ,(cdr x))
+		     rest)
+		,tree)))
+      tree))
+
+;; using nlet-tail
+(defmacro cxr (x tree)
+  (nlet-tail cxrg ((x x)
+		   (tree tree))
+	     (if (null x)
+		 tree
+	     (let ((opx (cond ((eq (second x) 'a) #'car)
+			     ((eq (second x) 'd) #'cdr)
+			     (t (error "No support op [~a,~a,~a]~%" (second x) x tree)))))
+		   (if (> (car x) 1)
+		       (funcall opx (cxrg (cons (- (car x) 1) (cdr x)) tree))
+		       (funcall opx (cxrg (cddr x) tree)))))))
