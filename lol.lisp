@@ -548,14 +548,75 @@ T
       tree))
 
 ;; using nlet-tail
-(defmacro cxr (x tree)
-  (nlet-tail cxrg ((x x)
-		   (tree tree))
-	     (if (null x)
-		 tree
-	     (let ((opx (cond ((eq (second x) 'a) #'car)
-			     ((eq (second x) 'd) #'cdr)
-			     (t (error "No support op [~a,~a,~a]~%" (second x) x tree)))))
-		   (if (> (car x) 1)
-		       (funcall opx (cxrg (cons (- (car x) 1) (cdr x)) tree))
-		       (funcall opx (cxrg (cddr x) tree)))))))
+(defmacro! cxr (x tree)
+  (if (null x)
+      tree
+      (let ((op (cond
+		  ((eq 'a (cadr x)) 'car)
+		  ((eq 'd (cadr x)) 'cdr)
+		  (t (error "Non A/D symbol")))))
+	`(nlet-tail
+	  ,g!name ((,g!count ,(car x))
+		   (,g!val (cxr ,(cddr x) ,tree)))
+	  (if (>= 0 ,g!count)
+	      ,g!val
+	      (,g!name (- ,g!count 1)
+		       (,op ,g!val)))))))
+
+
+(defmacro def-english-list-accessors (start end)
+  (if (not (<= 1 start end))
+      (error "Bad start/end range")
+      `(progn
+	 ,@(loop :for i :from start :to end :collect
+	      `(defun ,(symb
+			(map 'string
+			     (lambda (c)
+			       (if (alpha-char-p c)
+				   (char-upcase c)
+				   #\-))
+			     (format nil "~:r" i)))
+		   (arg)
+		 (cxr (1 a ,(- i 1) d) arg))))))
+
+
+(defun cxr-symbol-p (sym)
+  (if (symbolp sym)
+      (let ((chars (coerce (symbol-name sym) 'list)))
+	(and (< 6 (length chars))
+	     (char= #\C (car chars))
+	     (char= #\R (car (last chars)))
+	     (null (remove-if (lambda (c)
+				(or (char= #\A c)
+				    (char= #\D c)))
+			      (cdr (butlast chars))))))))
+
+
+(defun cxr-symbol-to-cxr-list (cxrsym)
+  (if (cxr-symbol-p cxrsym)
+      (let ((cxrchars (cdr ;; chop c
+		       (butlast ;; chop r
+			(coerce (symbol-name cxrsym) 'list)))))
+	(loop :for c :in cxrchars :append
+	   `(1 ,(if (char= c #\A)
+		    'a
+		    'd))))))
+
+
+(defmacro with-all-cxrs (&rest forms)
+  (let ((cxrsymbol (remove-duplicates
+		    (remove-if-not
+		     #'cxr-symbol-p
+		     (flatten forms)))))
+    `(labels (,@(loop :for cs :in cxrsymbol :collect
+		   `(,cs (l)
+			 (cxr ,(cxr-symbol-to-cxr-list cs) l))))
+       ,@forms)))
+
+
+
+
+
+
+
+
