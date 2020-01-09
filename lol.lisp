@@ -615,7 +615,97 @@ T
 
 
 
+;; chapter 6
 
+;; #` read macro
+(defun |#`-reader| (stream sub-char numarg)
+  (declare (ignore sub-char))
+  (unless numarg (setf numarg 1))
+  `(lambda ,(loop :for i :from 1 :to numarg :collect
+		  (symb 'a i))
+     ,(funcall (get-macro-character #\`) stream nil)))
+
+(set-dispatch-macro-character #\# #\` #'|#`-reader|)
+
+
+#||
+(#3`(((,@a2)) ,a3 (,a1 ,a1))
+      (gensym)
+      '(a b c)
+      'hello)
+---->
+(((A B C)) HELLO (#:G695 #:G695))
+
+Exercise: The references to the gensym #:G1735 
+look like they point to the same symbol but, 
+of course, you never really can tell with 
+gensyms by looking at their print names. 
+Are these symbols eq? Why or why not?
+
+EQ.
+As that is expand to 
+((LAMBDA (A1 A2 A3) 
+   `(((,@A2)) ,A3 (,A1 ,A1))) 
+ (GENSYM) 
+ '(A B C) 
+ 'HELLO)
+||#
+
+
+#||
+alet%
+
+* (alet% ((sum) (mul) (expt))
+    (funcall this :reset)
+    (dlambda
+      (:reset ()
+        (psetq sum 0
+               mul 1
+               expt 2))
+      (t (n)
+        (psetq sum (+ sum n)
+               mul (* mul n)
+               expt (expt expt n))
+        (list sum mul expt))))
+
+#<Interpreted Function>
+
+||#
+
+(defmacro alet% (letargs &rest body)
+  `(let ((this) ,@letargs)
+     (setf this ,@(last body))
+     ,@(butlast body)
+     this))
+
+(defmacro alet (letargs &rest body)
+  `(let ((this) ,@letargs)
+     (setf this ,@(last body))
+     ,@(butlast body)
+     (lambda (&rest params)
+       (apply this params))))
+
+(defmacro alambda (params &rest body)
+  `(labels ((self ,params ,@body))
+     #'self))
+
+#||
+(alet ((acc 0))
+  (alet-fsm
+    (going-up (n)
+      (if (eq n 'invert)
+        (state going-down)
+        (incf acc n)))
+    (going-down (n)
+      (if (eq n 'invert)
+        (state going-up)
+        (decf acc n)))))
+||#
+
+(defmacro alet-fsm (&rest states)
+  `(macrolet ((state (s) `(setq this #',s)))
+     (labels (,@states)
+       #',(caar states))))
 
 
 
