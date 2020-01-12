@@ -708,5 +708,183 @@ alet%
        #',(caar states))))
 
 
+#||
+ichain-before
+(alet ((acc 0))
+    (ichain-before
+      (format t "Changing from ~a~%" acc))
+    (lambda (n)
+      (incf acc n)))
+||#
+(defmacro! ichain-before (&rest body)
+  `(let ((,g!env this))
+     (setq this
+	   (lambda (&rest ,g!arg)
+	     ,@body
+	     (apply ,g!env ,g!arg)))))
 
 
+(defmacro! ichain-after (&rest body)
+  `(let ((,g!env this))
+     (setq this
+	   (lambda (&rest ,g!arg)
+	     (prog1
+		 (apply ,g!env ,g!arg)
+	       ,@body)))))
+
+(defmacro! ichain-intercept (&rest body)
+  `(let ((,g!env this))
+     (setq this
+	   (lambda (&rest ,g!arg)
+	     (block ,g!intercept
+	       (macrolet ((intercept (v)
+			    `(return-from ,',g!intercept ,v)))
+		 (prog1
+		     (apply ,g!env ,g!arg)
+		   ,@body)))))))
+
+(defmacro alet-hotpatch% (letargs &rest body)
+  `(let ((this) ,@letargs)
+     (setq this ,@(last body))
+     ,@(butlast body)
+     (lambda (&rest args)
+       (if (eq (car args) :hotpatch)
+	   (setq this (second args))
+	   (apply this args)))))
+
+(defmacro alet-hotpatch (letargs &rest body)
+  `(let ((this) ,@letargs)
+     (setq this ,@(last body))
+     ,@(butlast body)
+     (dlambda
+      (:hotpatch (clourse) (setq this (second clourse)))
+      (t (apply this args)))))
+
+;; closing
+(defmacro! let-hotpatch (letargs &rest body)
+  `(let ((,g!this) ,@letargs)
+     (setq ,g!this ,@(last body))
+     ,@(butlast body)
+     (dlambda
+      (:hotpatch (,g!clouser) (setq ,g!this ,g!clouser))
+      (t (&rest ,g!args) (apply ,g!this ,g!args)))))
+
+
+
+;; Let-binding-transform
+(defun let-binding-transform (bs)
+  (if bs
+      (loop :for x :in bs :collect
+			  (cond ((symbolp x) (list x))
+				((consp x) x)
+				(t (error "Not support type ~a~%" x))))))
+
+;; sub-let
+(defmacro sub-let (binding% &rest body)
+  (let ((bindings
+	  (mapcar (lambda (x)
+		    (cons (gensym (symbol-name (car x)))
+			  x))
+		  (let-binding-transform binding%))))
+    `(let (,@(loop :for x :in bindings :collect
+		   `(,(first x) ,(third x))))
+       ,@(tree-leaves
+	  body
+	  #1=(member x bindings :key #'second)
+	  (caar #1#)))))
+
+(defun tree-leaves%% (tree test result)
+  (if tree
+      (if (listp tree)
+	  (cons (tree-leaves%% (car tree) test result)
+		(tree-leaves%% (cdr tree) test result))
+	  (if (funcall test tree)
+	      (funcall result tree)
+	      tree))))
+
+(defmacro tree-leaves (tree test result)
+  `(tree-leaves%%
+    ,tree
+    (lambda (x)
+      (declare (ignore x))
+      ,test)
+    (lambda (x)
+      (declare (ignore x))
+      ,result)))
+
+
+(defmacro sub-let* (bindings &rest body)
+  `(sub-let ,bindings
+	    ,@(mapcar #'macroexpand-1 body)))
+
+
+(defmacro pandoriclet (letargs &rest body)
+  (let ((letargs (cons '(this)
+		       (let-binding-transform letargs))))
+    `(let ,letargs
+       (setq this ,@(last body))
+       ,@(butlast body)
+       (dlambda
+	(:pandoric-get (sym)
+		       ,(pandoriclet-get letargs))
+	(:pandoric-set (sym val)
+		       ,(pandoriclet-set letargs))
+	(t (&rest args)
+	   (apply this args))))))
+
+(defun pandoriclet-get (letargs)
+  `(case sym
+     ,@(mapcar #`((,(car a1)) ,(car a1)) letargs)
+     (t (error
+	 "Unknown pandoric-get sym ~a~%" sym))))
+
+(defun pandoriclet-set (letargs)
+  `(case sym
+     ,@(mapcar #`((,(car a1)) (setq ,(car a1) val)) letargs)
+     (t (error
+	 "Unknown pandoric-set sym ~a~%" sym))))
+
+(declaim (inline get-pandoric))
+
+(defun get-pandoric (box sym)
+  (funcall box :pandoric-get sym))
+
+(defsetf get-pandoric (box sym) (val)
+  `(progn
+     (funcall ,box :pandoric-set ,sym ,val)
+     ,val))
+
+(defmacro! with-pandoric (syms o!box &rest body)
+  `(symbol-macrolet
+       (,@(mapcar #`(,a1 (get-pandoric ,g!box ',a1))
+		  syms))
+     ,@body))
+
+(defun pandoric-hotpatch (box new)
+  (with-pandoric (this) box
+    (setq this new)))
+
+(defmacro pandoric-recode (vars box new)
+  `(with-pandoric (this ,@vars) ,box
+     (setq this ,new)))
+
+;;; plambda
+(defmacro plambda (largs pargs &rest body)
+  (let ((pargs (mapcar #'list pargs)))
+    `(let (this self)
+       (setq this (lambda ,largs ,@body)
+	     self (dlambda
+		   (:pandoric-get (sym)
+				  ,(pandoriclet-get pargs))
+		   (:pandoric-set (sym val)
+				  ,(pandoriclet-set pargs))
+		   (t (&rest args)
+		      (apply this args)))))))
+
+
+
+
+
+
+       
+       
