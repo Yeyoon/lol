@@ -884,6 +884,48 @@ ichain-before
 
 
 
+;;; make stats counter
+(defun make-stats-counter
+    (&key (count 0)
+       (sum 0)
+       (sum-of-squares 0))
+  (plambda (n) (sum count sum-of-squares)
+	   (incf sum-of-squares (expt n 2))
+	   (incf sum n)
+	   (incf count)))
+
+(defmacro defpan (name args &rest body)
+  `(defun ,name (self)
+     ,(if args
+	  `(with-pandoric ,args self
+			  ,@body)
+	  `(progn ,@body))))
+
+
+(defpan stats-counter-mean (sum count)
+  (/ sum count))
+
+(defpan stats-counter-variance
+    (sum-of-squares sum count)
+  (if (< count 2)
+      0
+      (/ (- sum-of-squares
+	    (* sum
+	       (stats-counter-mean self)))
+	 (- count 1))))
+
+(defpan stats-counter-stddev ()
+  (sqrt (stats-counter-variance self)))
+
+(defvar pandoric-eval-tunnel)
+
+(defmacro pandoric-eval (vars expr)
+  `(let ((pandoric-eval-tunnel
+	  (plambda () ,vars t)))
+     (eval `(with-pandoric
+		,',vars pandoric-eval-tunnel
+		,,expr))))
+
 
 
        
