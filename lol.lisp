@@ -1065,6 +1065,7 @@ ichain-before
 
 (defmacro! go-forth (o!forth &rest words)
   `(dolist (w ',words)
+     (format t "start go-forth word ~a~%" w)
      (funcall ,g!forth w)))
 
 (defvar forth-stdlib nil)
@@ -1074,8 +1075,151 @@ ichain-before
 	 (nconc forth-stdlib
 		',all)))
 
+(def-forth-prim create nil
+  (setf dict (make-forth-word :prev dict)))
+
+(def-forth-prim name nil
+  (setf (forth-word-name dict) (pop pstack)))
+
+(def-forth-prim immediate nil
+  (setf (forth-word-immediate dict) t))
 	      
+(forth-stdlib-add
+ create
+ ] create ] [
+ '{ name)
+
+(forth-stdlib-add
+ { (postpone [) [
+ '} name immediate)
+		  
+(def-forth-prim @ nil
+  (push (car (pop pstack))
+	pstack))
+
+(def-forth-prim ! nil
+  (let ((location (pop pstack)))
+    (setf (car location) (pop pstack))))
+
+(defmacro forth-unary-word-definer (&rest words)
+  `(progn
+     ,@(mapcar
+	#`(def-forth-prim ,a1 nil
+	    (push (,a1 (pop pstack))
+		  pstack))
+	words)))
+
+(defmacro! forth-binary-word-definer (&rest words)
+  `(progn
+     ,@(mapcar
+	#`(def-forth-prim ,a1 nil
+	    (let ((,g!top (pop pstack)))
+	      (push (,a1 (pop pstack)
+			 ,g!top)
+		    pstack)))
+	words)))
 
 
+(forth-unary-word-definer
+ not car cdr cadr caddr cadddr
+ oddp evenp)
+
+(forth-binary-word-definer
+ eq equal + - / = < > <= >=
+ max min and or)
+
+(def-forth-naked-prim branch-if nil
+  (setf pc (if (pop pstack)
+	       (cadr pc)
+	       (cddr pc))))
+
+(forth-stdlib-add
+ { r> drop } 'exit name)
+
+(def-forth-naked-prim compile nil
+  (setf (forth-word-thread dict)
+	(nconc (forth-word-thread dict)
+	       (list (cadr pc))))
+  (setf pc (cddr pc)))
+
+(def-forth-prim here nil
+  (push (last (forth-word-thread dict))
+	pstack))
+
+(forth-stdlib-add
+ {
+ compile not
+ compile branch-if
+ compile nop
+ here
+ }
+ 'if name immediate)
+
+;; fort debug add print-stack
+(def-forth-prim print-stack nil)
+  (format t "pstack is ~a~%" pstack))
+
+(forth-stdlib-add
+ { compile nop here swap ! } 'then name immediate)
+
+(forth-stdlib-add
+ { 0 swap - } 'negate name
+ { dup 0 < if negate then } 'abs name)
+
+(forth-stdlib-add
+ {
+ compile 't
+ compile branch-if
+ compile nop
+ here swap
+ compile nop
+ here swap ! } 'else name immediate)
+
+(forth-stdlib-add
+ { evenp if 0 else 1 then } 'mod2 name)
+
+
+(forth-stdlib-add
+ { compile nop here } 'begin name immediate
+ { compile 't compile branch-if compile nop here ! }
+ 'again name immediate)
+
+(defun get-forth-thread (forth word)
+  (with-pandoric (dict) forth
+    (forth-word-thread
+     (forth-lookup word dict))))
+
+(defun print-forth-thread (forth word)
+  (let ((*print-circle* t))
+    (print (get-forth-thread forth word))
+    t))
+
+
+(def-forth-prim recurse nil
+  (push (forth-word-thread dict) pstack))
+
+(forth-stdlib-add
+ {
+ recurse
+ compile nop
+ here ! } 'rec name immediate)
+
+(def-forth-prim myself3 t
+  (let ((nop (list nil)))
+    (setf (forth-word-thread dict)
+	  (nconc (forth-word-thread dict)
+		 (list nop)))
+    (setf (car nop) dict)))
+
+(def-forth-prim self nil
+  (push (forth-word-thread dict) pstack))
+
+(forth-stdlib-add
+ {
+ self
+ compile nop
+ here
+ ! } 'recurse name immediate)
+   
 
 
