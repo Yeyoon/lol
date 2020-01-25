@@ -1155,9 +1155,6 @@ ichain-before
  }
  'if name immediate)
 
-;; fort debug add print-stack
-(def-forth-prim print-stack nil)
-  (format t "pstack is ~a~%" pstack))
 
 (forth-stdlib-add
  { compile nop here swap ! } 'then name immediate)
