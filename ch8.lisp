@@ -35,7 +35,7 @@
   `(push ',code forth-prim-forms))
 
 (defmacro def-forth-prim (&rest code)
-  '(def-forth-naked-prim
+  `(def-forth-naked-prim
     ,@code
     (setf pc (cdr pc))))
 
@@ -67,7 +67,7 @@
   (push (pop rstack) pstack))
 
 ;; listing 8.7 : go-forth
-(demacro! go-forth (o!forth &rest words)
+(defmacro! go-forth (o!forth &rest words)
 	  `(dolist (w ',words)
 	     (funcall ,g!forth w)))
 
@@ -116,7 +116,7 @@
   (setf compiling t))
 
 (defmacro forth-compile-in (v)
-  `(setf (forth0-word-thread dict)
+  `(setf (forth-word-thread dict)
 	 (nconc (forth-word-thread dict)
 		(list ,v))))
 
@@ -321,7 +321,7 @@
 			(self (cdr c))))
 	     thread)
 	    (setf #1# (nconc #1# (funcall
-				  (fluify-aux)
+				  (flubify-aux)
 				  thread))))))
 
 (defun compile-flubified (thread thread-ht)
@@ -388,5 +388,5 @@
 			  collect))
 		  shaker-ht)
 		 (nreverse collect)))
-	 ,(compile-flubified
+	 ,(compile-flubified  
 	   thread thread-ht)))))
