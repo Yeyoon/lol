@@ -1,4 +1,4 @@
 ;;;; package.lisp
 
 (defpackage #:lol
-  (:use #:cl))
+  (:use #:cl #:cl-ppcre))

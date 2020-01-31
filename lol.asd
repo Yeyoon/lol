@@ -1,3 +1,4 @@
+
 ;;;; lol.asd
 
 (asdf:defsystem #:lol
@@ -6,6 +7,11 @@
   :license  "public domain"
   :version "0.0.1"
   :serial t
-  :depends-on ()
+  :depends-on ("cl-ppcre")
   :components ((:file "package")
-               (:file "lol")))
+	       (:file "utils")
+	       (:file "defmacrog_util")
+	       (:file "defmacrog")
+	       (:file "plambda")
+               (:file "lol")
+	       (:file "ch8")))
